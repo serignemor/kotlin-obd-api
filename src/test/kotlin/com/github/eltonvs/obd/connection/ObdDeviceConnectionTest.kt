@@ -126,7 +126,10 @@ class ObdDeviceConnectionTest {
                 )
 
             assertEquals("410D40", response.value)
-            assertTrue(response.rawResponse.elapsedTime < 250, "expected elapsed time below 250ms, was ${response.rawResponse.elapsedTime}ms")
+            assertTrue(
+                response.rawResponse.elapsedTime < 250,
+                "expected elapsed time below 250ms, was ${response.rawResponse.elapsedTime}ms",
+            )
         }
 
     @Test
@@ -193,8 +196,14 @@ class ObdDeviceConnectionTest {
             withTimeout(1_500) {
                 val response = connection.run(command, maxRetries = 1)
                 assertEquals("", response.value)
-                assertTrue(response.rawResponse.elapsedTime >= 450, "expected at least ~500ms, was ${response.rawResponse.elapsedTime}ms")
-                assertTrue(response.rawResponse.elapsedTime < 1_200, "expected legacy timeout below 1200ms, was ${response.rawResponse.elapsedTime}ms")
+                assertTrue(
+                    response.rawResponse.elapsedTime >= 450,
+                    "expected at least ~500ms, was ${response.rawResponse.elapsedTime}ms",
+                )
+                assertTrue(
+                    response.rawResponse.elapsedTime < 1_200,
+                    "expected legacy timeout below 1200ms, was ${response.rawResponse.elapsedTime}ms",
+                )
             }
         }
 
@@ -207,10 +216,20 @@ class ObdDeviceConnectionTest {
             val command = TestObdCommand(tag = "SPEED", pid = "0D")
 
             withTimeout(500) {
-                val response = connection.runWithReadPolicy(command, readPolicy = ObdReadPolicy(responseTimeoutMs = 40, interByteTimeoutMs = 25))
+                val response =
+                    connection.runWithReadPolicy(
+                        command,
+                        readPolicy = ObdReadPolicy(responseTimeoutMs = 40, interByteTimeoutMs = 25),
+                    )
                 assertEquals("", response.value)
-                assertTrue(response.rawResponse.elapsedTime >= 30, "expected explicit timeout near 40ms, was ${response.rawResponse.elapsedTime}ms")
-                assertTrue(response.rawResponse.elapsedTime < 250, "expected explicit timeout below 250ms, was ${response.rawResponse.elapsedTime}ms")
+                assertTrue(
+                    response.rawResponse.elapsedTime >= 30,
+                    "expected explicit timeout near 40ms, was ${response.rawResponse.elapsedTime}ms",
+                )
+                assertTrue(
+                    response.rawResponse.elapsedTime < 250,
+                    "expected explicit timeout below 250ms, was ${response.rawResponse.elapsedTime}ms",
+                )
             }
         }
 }

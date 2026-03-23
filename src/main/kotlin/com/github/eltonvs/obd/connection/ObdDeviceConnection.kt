@@ -19,6 +19,11 @@ import kotlin.system.measureTimeMillis
 private const val LEGACY_READ_RETRY_DELAY_MS = 500L
 private const val READ_POLL_INTERVAL_MS = 10L
 
+private data class ReadProgress(
+    val interByteDeadline: Long,
+    val shouldStop: Boolean,
+)
+
 class ObdDeviceConnection
     @JvmOverloads
     constructor(
@@ -34,8 +39,7 @@ class ObdDeviceConnection
             useCache: Boolean = false,
             delayTime: Long = 0,
             maxRetries: Int = 5,
-        ): ObdResponse =
-            runWithReadPolicy(command, useCache, delayTime, legacyReadPolicy(maxRetries))
+        ): ObdResponse = runWithReadPolicy(command, useCache, delayTime, legacyReadPolicy(maxRetries))
 
         internal suspend fun runWithReadPolicy(
             command: ObdCommand,
@@ -90,37 +94,24 @@ class ObdDeviceConnection
                 val responseDeadline = deadlineFromNow(readPolicy.responseTimeoutMs)
                 var interByteDeadline = responseDeadline
                 val response = StringBuilder()
-                var isReading = true
+                var shouldStop = false
 
-                while (isReading) {
-                    if (inputStream.available() > 0) {
-                        while (inputStream.available() > 0) {
-                            val byteValue = inputStream.read()
-                            if (byteValue == -1) {
-                                isReading = false
-                                break
-                            }
-                            val charValue = byteValue.toChar()
-                            if (charValue == '>') {
-                                isReading = false
-                                break
+                while (!shouldStop) {
+                    val readProgress = drainAvailableBytes(response, interByteDeadline, readPolicy)
+                    interByteDeadline = readProgress.interByteDeadline
+                    shouldStop = readProgress.shouldStop
+                    if (!shouldStop) {
+                        val now = System.nanoTime()
+                        val nextDeadline =
+                            if (response.isNotEmpty()) {
+                                minOf(responseDeadline, interByteDeadline)
                             } else {
-                                response.append(charValue)
-                                interByteDeadline = deadlineFromNow(readPolicy.interByteTimeoutMs)
+                                responseDeadline
                             }
+                        shouldStop = now >= nextDeadline
+                        if (!shouldStop) {
+                            delay(nextPollDelayMs(nextDeadline - now))
                         }
-                    }
-
-                    if (!isReading) {
-                        break
-                    }
-
-                    val now = System.nanoTime()
-                    val nextDeadline = if (response.isNotEmpty()) minOf(responseDeadline, interByteDeadline) else responseDeadline
-                    if (now >= nextDeadline) {
-                        isReading = false
-                    } else {
-                        delay(nextPollDelayMs(nextDeadline - now))
                     }
                 }
                 cleanResponse(response)
@@ -131,7 +122,14 @@ class ObdDeviceConnection
             return "$classKey:${command.rawCommand}"
         }
 
-        private fun cleanResponse(response: StringBuilder): String = removeAll(SEARCHING_PATTERN, response.toString()).trim()
+        private fun cleanResponse(response: StringBuilder): String {
+            val cleanedResponse =
+                removeAll(
+                    SEARCHING_PATTERN,
+                    response.toString(),
+                )
+            return cleanedResponse.trim()
+        }
 
         private fun legacyReadPolicy(maxRetries: Int): ObdReadPolicy {
             require(maxRetries >= 0) { "maxRetries must be >= 0" }
@@ -141,7 +139,34 @@ class ObdDeviceConnection
             )
         }
 
-        private fun deadlineFromNow(durationMs: Long): Long = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(durationMs)
+        private fun drainAvailableBytes(
+            response: StringBuilder,
+            interByteDeadline: Long,
+            readPolicy: ObdReadPolicy,
+        ): ReadProgress {
+            var nextInterByteDeadline = interByteDeadline
+            var shouldStop = false
+            while (inputStream.available() > 0 && !shouldStop) {
+                val byteValue = inputStream.read()
+                if (byteValue == -1) {
+                    shouldStop = true
+                } else {
+                    val charValue = byteValue.toChar()
+                    if (charValue == '>') {
+                        shouldStop = true
+                    } else {
+                        response.append(charValue)
+                        nextInterByteDeadline = deadlineFromNow(readPolicy.interByteTimeoutMs)
+                    }
+                }
+            }
+            return ReadProgress(nextInterByteDeadline, shouldStop)
+        }
+
+        private fun deadlineFromNow(durationMs: Long): Long {
+            val durationNanos = TimeUnit.MILLISECONDS.toNanos(durationMs)
+            return System.nanoTime() + durationNanos
+        }
 
         private fun nextPollDelayMs(remainingNanos: Long): Long {
             val remainingMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos)
