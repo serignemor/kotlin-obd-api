@@ -13,9 +13,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 import kotlin.system.measureTimeMillis
 
-private const val READ_RETRY_DELAY_MS = 500L
+private const val LEGACY_READ_RETRY_DELAY_MS = 500L
+private const val READ_POLL_INTERVAL_MS = 10L
 
 class ObdDeviceConnection
     @JvmOverloads
@@ -33,13 +35,21 @@ class ObdDeviceConnection
             delayTime: Long = 0,
             maxRetries: Int = 5,
         ): ObdResponse =
+            runWithReadPolicy(command, useCache, delayTime, legacyReadPolicy(maxRetries))
+
+        internal suspend fun runWithReadPolicy(
+            command: ObdCommand,
+            useCache: Boolean = false,
+            delayTime: Long = 0,
+            readPolicy: ObdReadPolicy,
+        ): ObdResponse =
             runMutex.withLock {
                 val cacheKey = cacheKey(command)
                 val obdRawResponse =
                     if (useCache && responseCache[cacheKey] != null) {
                         responseCache.getValue(cacheKey)
                     } else {
-                        runCommand(command, delayTime, maxRetries).also {
+                        runCommand(command, delayTime, readPolicy).also {
                             if (useCache) {
                                 responseCache[cacheKey] = it
                             }
@@ -51,13 +61,13 @@ class ObdDeviceConnection
         private suspend fun runCommand(
             command: ObdCommand,
             delayTime: Long,
-            maxRetries: Int,
+            readPolicy: ObdReadPolicy,
         ): ObdRawResponse {
             var rawData = ""
             val elapsedTime =
                 measureTimeMillis {
                     sendCommand(command, delayTime)
-                    rawData = readRawData(maxRetries)
+                    rawData = readRawData(readPolicy)
                 }
             return ObdRawResponse(rawData, elapsedTime)
         }
@@ -75,40 +85,66 @@ class ObdDeviceConnection
             }
         }
 
-        private suspend fun readRawData(maxRetries: Int): String =
+        private suspend fun readRawData(readPolicy: ObdReadPolicy): String =
             withContext(ioDispatcher) {
-                val res = StringBuilder()
-                var retriesCount = 0
-
-                // Read until '>' arrives, stream ends (-1), or retries are exhausted.
+                val responseDeadline = deadlineFromNow(readPolicy.responseTimeoutMs)
+                var interByteDeadline = responseDeadline
+                val response = StringBuilder()
                 var isReading = true
+
                 while (isReading) {
                     if (inputStream.available() > 0) {
-                        val byteValue = inputStream.read()
-                        if (byteValue == -1) {
-                            isReading = false
-                        } else {
+                        while (inputStream.available() > 0) {
+                            val byteValue = inputStream.read()
+                            if (byteValue == -1) {
+                                isReading = false
+                                break
+                            }
                             val charValue = byteValue.toChar()
                             if (charValue == '>') {
                                 isReading = false
+                                break
                             } else {
-                                res.append(charValue)
+                                response.append(charValue)
+                                interByteDeadline = deadlineFromNow(readPolicy.interByteTimeoutMs)
                             }
                         }
+                    }
+
+                    if (!isReading) {
+                        break
+                    }
+
+                    val now = System.nanoTime()
+                    val nextDeadline = if (response.isNotEmpty()) minOf(responseDeadline, interByteDeadline) else responseDeadline
+                    if (now >= nextDeadline) {
+                        isReading = false
                     } else {
-                        if (retriesCount >= maxRetries) {
-                            isReading = false
-                        } else {
-                            retriesCount += 1
-                            delay(READ_RETRY_DELAY_MS)
-                        }
+                        delay(nextPollDelayMs(nextDeadline - now))
                     }
                 }
-                removeAll(SEARCHING_PATTERN, res.toString()).trim()
+                cleanResponse(response)
             }
 
         private fun cacheKey(command: ObdCommand): String {
             val classKey = command::class.qualifiedName ?: command.javaClass.name
             return "$classKey:${command.rawCommand}"
+        }
+
+        private fun cleanResponse(response: StringBuilder): String = removeAll(SEARCHING_PATTERN, response.toString()).trim()
+
+        private fun legacyReadPolicy(maxRetries: Int): ObdReadPolicy {
+            require(maxRetries >= 0) { "maxRetries must be >= 0" }
+            return ObdReadPolicy(
+                responseTimeoutMs = maxRetries.toLong() * LEGACY_READ_RETRY_DELAY_MS,
+                interByteTimeoutMs = LEGACY_READ_RETRY_DELAY_MS,
+            )
+        }
+
+        private fun deadlineFromNow(durationMs: Long): Long = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(durationMs)
+
+        private fun nextPollDelayMs(remainingNanos: Long): Long {
+            val remainingMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos)
+            return minOf(READ_POLL_INTERVAL_MS, maxOf(1L, remainingMs))
         }
     }
