@@ -160,7 +160,7 @@ class ObdDeviceConnectionTest {
             val response =
                 connection.runWithReadPolicy(
                     command,
-                    readPolicy = ObdReadPolicy(responseTimeoutMs = 1_500, interByteTimeoutMs = 30),
+                    readPolicy = ObdReadPolicy(responseTimeoutMs = 1_500, interByteTimeoutMs = 150),
                 )
 
             assertEquals("410C1AF8", response.value)
@@ -184,6 +184,24 @@ class ObdDeviceConnectionTest {
             }
         }
     }
+
+    @Test
+    fun `returns quickly when max retries is zero and no data is available`() =
+        runBlocking {
+            val input = IdleInputStream()
+            val output = ByteArrayOutputStream()
+            val connection = ObdDeviceConnection(input, output, Dispatchers.Default)
+            val command = TestObdCommand(tag = "SPEED", pid = "0D")
+
+            withTimeout(400) {
+                val response = connection.run(command, maxRetries = 0)
+                assertEquals("", response.value)
+                assertTrue(
+                    response.rawResponse.elapsedTime < 200,
+                    "expected near-immediate return, was ${response.rawResponse.elapsedTime}ms",
+                )
+            }
+        }
 
     @Test
     fun `uses legacy max retries as response timeout budget`() =
