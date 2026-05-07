@@ -32,7 +32,7 @@ class ObdDeviceConnection(
         maxRetries: Int = 5,
     ): ObdResponse =
         runMutex.withLock {
-            val cacheKey = "${command::class.qualifiedName ?: command.tag}:${command.rawCommand}"
+            val cacheKey = "${command.tag}:${command.rawCommand}"
             val obdRawResponse =
                 if (useCache && responseCache[cacheKey] != null) {
                     responseCache.getValue(cacheKey)

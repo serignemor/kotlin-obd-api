@@ -22,10 +22,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-      - name: Test (JVM)
-        run: ./gradlew jvmTest
-      - name: Lint
-        run: ./gradlew ktlintCheck detekt
+      - name: Build and Test
+        run: ./gradlew build
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
