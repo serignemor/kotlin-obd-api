@@ -80,6 +80,8 @@ class ObdDeviceConnection(
             var retriesCount = 0
 
             // Read until '>' arrives or retries are exhausted.
+            // request(1) returns false when no bytes are buffered yet;
+            // the retry loop mirrors the old InputStream.available() == 0 path.
             while (retriesCount < maxRetries) {
                 if (inputStream.request(1)) {
                     val charValue = inputStream.readByte().toInt().toChar()
