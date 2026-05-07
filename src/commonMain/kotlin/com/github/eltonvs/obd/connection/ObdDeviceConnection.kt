@@ -80,18 +80,25 @@ class ObdDeviceConnection(
             var retriesCount = 0
 
             // Read until '>' arrives or retries are exhausted.
-            // request(1) returns false when no bytes are buffered yet;
-            // the retry loop mirrors the old InputStream.available() == 0 path.
-            while (retriesCount < maxRetries) {
+            // Always attempt to read available data first; only consult
+            // retriesCount when no bytes are buffered (mirrors the original
+            // InputStream.available() == 0 path).
+            var isReading = true
+            while (isReading) {
                 if (inputStream.request(1)) {
                     val charValue = inputStream.readByte().toInt().toChar()
                     if (charValue == '>') {
-                        break
+                        isReading = false
+                    } else {
+                        res.append(charValue)
                     }
-                    res.append(charValue)
                 } else {
-                    retriesCount += 1
-                    delay(READ_RETRY_DELAY_MS)
+                    if (retriesCount >= maxRetries) {
+                        isReading = false
+                    } else {
+                        retriesCount += 1
+                        delay(READ_RETRY_DELAY_MS)
+                    }
                 }
             }
             removeAll(SEARCHING_PATTERN, res.toString()).trim()
