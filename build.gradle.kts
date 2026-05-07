@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalWasmDsl::class)
+
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestDescriptor
@@ -5,6 +7,7 @@ import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
     alias(libs.plugins.multiplatform)
@@ -23,20 +26,12 @@ repositories {
 kotlin {
     jvm()
     iosArm64()
-    iosX64()
     iosSimulatorArm64()
     macosArm64()
-    macosX64()
     linuxX64()
     mingwX64()
-    js {
-        browser()
-        nodejs()
-    }
-    wasmJs {
-        browser()
-        nodejs()
-    }
+    wasmJs { nodejs() }
+    js { nodejs() }
 
     sourceSets {
         commonMain.dependencies {
