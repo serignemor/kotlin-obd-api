@@ -27,6 +27,13 @@ class RPMCommandTests {
     fun `test valid rpm responses handler`() {
         listOf(
             "410C200D" to 2051,
+            "410C10A4" to 1065,
+            "41 0C 10 A4" to 1065,
+            "41 0c 10 a4" to 1065,
+            "410C10A4410C10C1" to 1065,
+            "41 0C 10 A4 41 0C 10 C1" to 1065,
+            "410C0E02410C0E02" to 896,
+            "41 0C 0E 02  41 0C 0E 02" to 896,
             "410C283C" to 2575,
             "410C0A00" to 640,
             "410C0000" to 0,
