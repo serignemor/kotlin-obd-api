@@ -2,7 +2,6 @@ package com.github.eltonvs.obd.command
 
 import kotlin.math.abs
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
@@ -14,13 +13,14 @@ fun formatFloat(
     decimalPlaces: Int,
 ): String {
     val multiplier = 10f.pow(decimalPlaces)
-    val rounded = (value * multiplier).roundToLong() / multiplier.toDouble()
+    val rounded = (value * multiplier).roundToLong()
 
     val isNegative = rounded < 0
-    val absValue = abs(rounded)
+    val absRounded = abs(rounded)
 
-    val intPart = absValue.toLong()
-    val fracPart = ((absValue - intPart) * multiplier).roundToInt()
+    val divisor = multiplier.toLong()
+    val intPart = absRounded / divisor
+    val fracPart = (absRounded % divisor).toInt()
 
     return buildString {
         if (isNegative) append('-')

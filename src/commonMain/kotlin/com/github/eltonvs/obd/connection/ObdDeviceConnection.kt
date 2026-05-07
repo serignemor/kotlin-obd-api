@@ -80,7 +80,7 @@ class ObdDeviceConnection(
             var retriesCount = 0
 
             // Read until '>' arrives or retries are exhausted.
-            while (retriesCount <= maxRetries) {
+            while (retriesCount < maxRetries) {
                 if (inputStream.request(1)) {
                     val charValue = inputStream.readByte().toInt().toChar()
                     if (charValue == '>') {
