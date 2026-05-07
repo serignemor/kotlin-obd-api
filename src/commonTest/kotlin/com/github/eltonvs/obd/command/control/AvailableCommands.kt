@@ -1,7 +1,7 @@
 package com.github.eltonvs.obd.command.control
 
 import com.github.eltonvs.obd.command.ObdRawResponse
-import com.github.eltonvs.obd.formatHex
+import com.github.eltonvs.obd.command.formatHex
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

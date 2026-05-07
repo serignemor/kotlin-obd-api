@@ -1,7 +1,7 @@
 package com.github.eltonvs.obd.command.pressure
 
 import com.github.eltonvs.obd.command.ObdRawResponse
-import com.github.eltonvs.obd.formatFloat
+import com.github.eltonvs.obd.command.formatFloat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
