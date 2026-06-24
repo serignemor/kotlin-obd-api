@@ -2,11 +2,13 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - master
+    branches: [master]
   push:
-    branches:
-      - master
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -16,7 +18,18 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Verify
-        run: ./gradlew --no-daemon clean test ktlintCheck detekt
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Build and Test
+        run: ./gradlew build
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
